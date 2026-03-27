@@ -10,19 +10,27 @@ Net Pulse is a clean local web app for checking whether hosts are online via pin
 - light/dark mode
 - clean minimal UI
 - local JSON storage
+- Docker / Portainer ready
 
-## Local run
+## Local Python run
 
 ```bash
 python3 app.py
+```
+
+## Docker Compose
+
+```bash
+docker compose up -d --build
 ```
 
 Then open:
 
 - `http://<host>:9301`
 
-## Notes
+## Portainer
 
-- `hosts.json` starts empty
-- no sample IPs or hostnames are included
-- current version is designed for local use first
+Use this repository as a stack with:
+
+- Branch: `main`
+- Compose path: `docker-compose.yml`

@@ -1,0 +1,16 @@
+services:
+  net-pulse:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: net-pulse
+    restart: unless-stopped
+    ports:
+      - "9301:9301"
+    environment:
+      - HOSTS_FILE=/app/data/hosts.json
+    volumes:
+      - net-pulse-data:/app/data
+
+volumes:
+  net-pulse-data:

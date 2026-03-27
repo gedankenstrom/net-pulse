@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
-DATA = BASE / 'hosts.json'
+DATA = Path(__import__('os').environ.get('HOSTS_FILE', str(BASE / 'hosts.json')))
 INDEX = BASE / 'index.html'
 HOST = '0.0.0.0'
 PORT = 9301
