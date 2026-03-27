@@ -20,6 +20,8 @@ The container image is published to:
 
 ## Portainer Stack / Docker Compose
 
+Use this compose file and make sure you redeploy/pull the latest image after updates:
+
 ```yaml
 services:
   net-pulse:
