@@ -1,8 +1,6 @@
 services:
   net-pulse:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/gedankenstrom/net-pulse:latest
     container_name: net-pulse
     restart: unless-stopped
     ports:

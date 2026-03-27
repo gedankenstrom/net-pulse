@@ -12,25 +12,27 @@ Net Pulse is a clean local web app for checking whether hosts are online via pin
 - local JSON storage
 - Docker / Portainer ready
 
-## Local Python run
+## Docker image
 
-```bash
-python3 app.py
+The container image is published to:
+
+- `ghcr.io/gedankenstrom/net-pulse:latest`
+
+## Portainer Stack / Docker Compose
+
+```yaml
+services:
+  net-pulse:
+    image: ghcr.io/gedankenstrom/net-pulse:latest
+    container_name: net-pulse
+    restart: unless-stopped
+    ports:
+      - "9301:9301"
+    environment:
+      - HOSTS_FILE=/app/data/hosts.json
+    volumes:
+      - net-pulse-data:/app/data
+
+volumes:
+  net-pulse-data:
 ```
-
-## Docker Compose
-
-```bash
-docker compose up -d --build
-```
-
-Then open:
-
-- `http://<host>:9301`
-
-## Portainer
-
-Use this repository as a stack with:
-
-- Branch: `main`
-- Compose path: `docker-compose.yml`
