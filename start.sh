@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 cd /app
 if [ ! -f "${HOSTS_FILE:-/app/data/hosts.json}" ]; then
   mkdir -p "$(dirname "${HOSTS_FILE:-/app/data/hosts.json}")"
