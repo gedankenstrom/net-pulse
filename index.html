@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Net Pulse</title>
+  <style>
+    :root {
+      --bg: #f5f5f7; --panel: rgba(255,255,255,.78); --text: #111827; --muted: #6b7280; --border: rgba(15,23,42,.08);
+      --ok: #12805c; --down: #c2410c; --accent: #0071e3;
+    }
+    body.dark {
+      --bg: #0f1115; --panel: rgba(23,28,34,.82); --text: #f5f7fa; --muted: #9aa4b2; --border: rgba(255,255,255,.08);
+      --ok: #87d7ac; --down: #ff9e9e; --accent: #6ea8fe;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 28px 18px 40px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 22px; }
+    .title-block { min-width: 0; }
+    h1 { margin: 0 0 6px; font-size: clamp(32px, 5vw, 44px); letter-spacing: -0.03em; }
+    .sub { color: var(--muted); margin-bottom: 0; font-size: 17px; }
+    .toolbar { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+    .theme-toggle, .gear { appearance: none; -webkit-appearance: none; -moz-appearance: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: transparent; border: 0 !important; border-radius: 0; padding: 0; margin: 0; line-height: 1; box-shadow: none !important; outline: none !important; transform: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-size: 19px; font-weight: 500; color: var(--text); font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
+    .theme-toggle:focus, .theme-toggle:active, .gear:focus, .gear:active { outline: none !important; box-shadow: none !important; border: 0 !important; transform: none; }
+    .form, .card { background: var(--panel); border: 1px solid var(--border); border-radius: 22px; padding: 18px; box-shadow: 0 8px 30px rgba(15,23,42,.06); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .form { display: none; gap: 10px; margin-bottom: 18px; }
+    .form.open { display: grid; }
+    input { width: 100%; padding: 13px 15px; border-radius: 14px; border: 1px solid var(--border); background: rgba(255,255,255,.9); color: var(--text); font-size: 16px; }
+    button { border: 0; border-radius: 14px; padding: 12px 15px; font-weight: 700; cursor: pointer; background: rgba(17,24,39,.06); color: var(--text); }
+    body.dark button:not(.theme-toggle):not(.gear) { background: rgba(255,255,255,.08); color: var(--text); }
+    .list { display: grid; gap: 14px; }
+    .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .meta { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    .badge { padding: 7px 11px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+    .up { background: rgba(18,128,92,.10); color: var(--ok); }
+    .down { background: rgba(194,65,12,.10); color: var(--down); }
+    .right { display: flex; gap: 8px; align-items: center; }
+    .ghost { background: rgba(17,24,39,.06); color: var(--text); display: none; }
+    body.manage .ghost { display: inline-flex; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="title-block">
+        <h1>Net Pulse</h1>
+        <div class="sub">Live Online Status</div>
+      </div>
+
+      <div class="toolbar">
+        <button class="theme-toggle" id="themeBtn" aria-label="Theme umschalten">◐</button>
+        <button class="gear" id="gearBtn" aria-label="Host hinzufügen öffnen">⌘</button>
+      </div>
+    </div>
+
+    <div class="form" id="form">
+      <input id="name" placeholder="Name (optional)">
+      <input id="target" placeholder="IP oder Hostname, z. B. 192.168.25.200">
+      <button id="addBtn">Host hinzufügen</button>
+    </div>
+
+    <div class="list" id="list"></div>
+  </div>
+
+  <script>
+    const list = document.getElementById('list');
+    const form = document.getElementById('form');
+    const themeBtn = document.getElementById('themeBtn');
+    const gearBtn = document.getElementById('gearBtn');
+    const nameInput = document.getElementById('name');
+    const targetInput = document.getElementById('target');
+    const addBtn = document.getElementById('addBtn');
+
+    function esc(v) {
+      return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function applyTheme(theme) {
+      document.body.classList.toggle('dark', theme === 'dark');
+      localStorage.setItem('net-pulse-theme', theme);
+    }
+
+    const savedTheme = localStorage.getItem('net-pulse-theme') || 'light';
+    applyTheme(savedTheme);
+
+    function fmt(ts) {
+      if (!ts) return '-';
+      return new Date(ts * 1000).toLocaleTimeString('de-DE');
+    }
+
+    async function loadHosts() {
+      const res = await fetch('/api/hosts', { cache: 'no-store' });
+      const data = await res.json();
+      const hosts = data.hosts || [];
+      if (!hosts.length) {
+        list.innerHTML = '<div class="card">Noch keine Hosts eingetragen.</div>';
+        return;
+      }
+      list.innerHTML = hosts.map(h => `
+        <div class="card">
+          <div class="row">
+            <div>
+              <div><strong>${esc(h.name)}</strong></div>
+              <div class="meta">${esc(h.target)} · Letzter Check: ${esc(fmt(h.checkedAt))}${h.latencyMs ? ' · ' + esc(h.latencyMs) + ' ms' : ''}</div>
+            </div>
+            <div class="right">
+              <span class="badge ${h.online ? 'up' : 'down'}">${h.online ? 'Online' : 'Offline'}</span>
+              <button class="ghost" onclick="removeHost('${esc(h.id)}')">Löschen</button>
+            </div>
+          </div>
+        </div>`).join('');
+    }
+
+    async function addHost() {
+      const name = nameInput.value.trim();
+      const target = targetInput.value.trim();
+      if (!target) return;
+      await fetch('/api/hosts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, target })
+      });
+      nameInput.value = '';
+      targetInput.value = '';
+      loadHosts();
+    }
+
+    async function removeHost(id) {
+      await fetch('/api/hosts/' + id, { method: 'DELETE' });
+      loadHosts();
+    }
+
+    themeBtn.addEventListener('click', () => {
+      const next = document.body.classList.contains('dark') ? 'light' : 'dark';
+      applyTheme(next);
+    });
+
+    gearBtn.addEventListener('click', () => {
+      const open = form.classList.toggle('open');
+      document.body.classList.toggle('manage', open);
+      if (open) targetInput.focus();
+    });
+
+    addBtn.addEventListener('click', addHost);
+    loadHosts();
+    setInterval(loadHosts, 5000);
+    window.removeHost = removeHost;
+  </script>
+</body>
+</html>

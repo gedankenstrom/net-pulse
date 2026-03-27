@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+import concurrent.futures
+import json
+import subprocess
+import time
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+BASE = Path(__file__).resolve().parent
+DATA = BASE / 'hosts.json'
+INDEX = BASE / 'index.html'
+HOST = '0.0.0.0'
+PORT = 9301
+
+
+def load_hosts():
+    if not DATA.exists():
+        return []
+    try:
+        data = json.loads(DATA.read_text(encoding='utf-8'))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_hosts(hosts):
+    DATA.write_text(json.dumps(hosts, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def ping_target(target):
+    start = time.time()
+    proc = subprocess.run(['ping', '-c', '1', '-W', '1', target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    latency = round((time.time() - start) * 1000)
+    return proc.returncode == 0, latency
+
+
+def enrich_hosts(hosts):
+    def check(h):
+        online, latency = ping_target(h['target'])
+        return {
+            **h,
+            'online': online,
+            'latencyMs': latency if online else None,
+            'checkedAt': int(time.time())
+        }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=32) as ex:
+        return list(ex.map(check, hosts))
+
+
+class Handler(BaseHTTPRequestHandler):
+    def send_json(self, payload, code=200):
+        raw = json.dumps(payload).encode('utf-8')
+        self.send_response(code)
+        self.send_header('Content-Type', 'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(raw)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self):
+        if self.path in ['/', '/index.html']:
+            raw = INDEX.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+        if self.path == '/api/hosts':
+            self.send_json({'hosts': enrich_hosts(load_hosts())})
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def do_POST(self):
+        if self.path != '/api/hosts':
+            self.send_response(404)
+            self.end_headers()
+            return
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+            body = self.rfile.read(length).decode('utf-8')
+            data = json.loads(body)
+            name = str(data.get('name', '')).strip()
+            target = str(data.get('target', '')).strip()
+            if not target:
+                self.send_json({'error': 'target required'}, 400)
+                return
+            hosts = load_hosts()
+            hosts.append({'id': uuid.uuid4().hex[:10], 'name': name or target, 'target': target})
+            save_hosts(hosts)
+            self.send_json({'ok': True})
+        except Exception as e:
+            self.send_json({'error': str(e)}, 500)
+
+    def do_DELETE(self):
+        if not self.path.startswith('/api/hosts/'):
+            self.send_response(404)
+            self.end_headers()
+            return
+        host_id = self.path.rsplit('/', 1)[-1]
+        hosts = load_hosts()
+        hosts = [h for h in hosts if h.get('id') != host_id]
+        save_hosts(hosts)
+        self.send_json({'ok': True})
+
+    def log_message(self, fmt, *args):
+        return
+
+
+if __name__ == '__main__':
+    if not DATA.exists():
+        save_hosts([])
+    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f'Listening on http://{HOST}:{PORT}')
+    httpd.serve_forever()
