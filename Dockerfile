@@ -7,11 +7,10 @@ RUN apt-get update \
 WORKDIR /app
 COPY app.py /app/app.py
 COPY index.html /app/index.html
-COPY start.sh /app/start.sh
 
-RUN chmod +x /app/start.sh && mkdir -p /app/data
+RUN mkdir -p /app/data
 
 ENV HOSTS_FILE=/app/data/hosts.json
 EXPOSE 9301
 
-CMD ["/app/start.sh"]
+CMD ["python3", "/app/app.py"]

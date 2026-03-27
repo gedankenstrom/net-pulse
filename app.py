@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import concurrent.futures
 import json
+import os
 import subprocess
 import time
 import uuid
@@ -8,15 +9,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
-DATA = Path(__import__('os').environ.get('HOSTS_FILE', str(BASE / 'hosts.json')))
+DATA = Path(os.environ.get('HOSTS_FILE', str(BASE / 'hosts.json')))
 INDEX = BASE / 'index.html'
 HOST = '0.0.0.0'
 PORT = 9301
 
 
-def load_hosts():
+def ensure_data_file():
+    DATA.parent.mkdir(parents=True, exist_ok=True)
     if not DATA.exists():
-        return []
+        DATA.write_text('[]\n', encoding='utf-8')
+
+
+def load_hosts():
+    ensure_data_file()
     try:
         data = json.loads(DATA.read_text(encoding='utf-8'))
         return data if isinstance(data, list) else []
@@ -25,6 +31,7 @@ def load_hosts():
 
 
 def save_hosts(hosts):
+    ensure_data_file()
     DATA.write_text(json.dumps(hosts, ensure_ascii=False, indent=2), encoding='utf-8')
 
 
@@ -111,8 +118,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    if not DATA.exists():
-        save_hosts([])
+    ensure_data_file()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f'Listening on http://{HOST}:{PORT}')
     httpd.serve_forever()
