@@ -75,6 +75,22 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(raw)
             return
+        if self.path == '/icon.svg':
+            raw = (BASE / 'icon.svg').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/svg+xml')
+            self.send_header('Content-Length', str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+        if self.path == '/apple-touch-icon.png':
+            raw = (BASE / 'apple-touch-icon.png').read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'image/png')
+            self.send_header('Content-Length', str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
         if self.path == '/api/hosts':
             self.send_json({'hosts': enrich_hosts(load_hosts())})
             return
