@@ -29,6 +29,10 @@
     .theme-toggle, .gear { appearance: none; -webkit-appearance: none; -moz-appearance: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: transparent; border: 0 !important; border-radius: 0; padding: 0; margin: 0; line-height: 1; box-shadow: none !important; outline: none !important; transform: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-size: 19px; font-weight: 500; color: var(--text); font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, Arial, sans-serif; }
     .theme-toggle:focus, .theme-toggle:active, .gear:focus, .gear:active { outline: none !important; box-shadow: none !important; border: 0 !important; transform: none; }
     .form, .card { background: var(--panel); border: 1px solid var(--border); border-radius: 22px; padding: 18px; box-shadow: 0 8px 30px rgba(15,23,42,.06); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .internet-card { margin-bottom: 18px; }
+    .internet-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .internet-details { color: var(--muted); font-size: 13px; margin-top: 10px; line-height: 1.45; }
+    .internet-meta { color: var(--muted); font-size: 14px; margin-top: 6px; }
     .form { display: none; gap: 10px; margin-bottom: 18px; }
     .form.open { display: grid; }
     input { width: 100%; padding: 13px 15px; border-radius: 14px; border: 1px solid var(--border); background: rgba(255,255,255,.9); color: var(--text); font-size: 16px; }
@@ -59,6 +63,19 @@
       </div>
     </div>
 
+    <div class="card internet-card" id="internetCard">
+      <div class="row">
+        <div>
+          <div class="internet-title">Internet</div>
+          <div class="internet-meta" id="internetSummary">Prüfe Verbindung …</div>
+        </div>
+        <div class="right">
+          <span class="badge" id="internetBadge">Prüfe …</span>
+        </div>
+      </div>
+      <div class="internet-details" id="internetChecks"></div>
+    </div>
+
     <div class="form" id="form">
       <input id="name" placeholder="Name (optional)">
       <input id="target" placeholder="IP oder Hostname, z. B. 192.168.25.200">
@@ -76,6 +93,9 @@
     const nameInput = document.getElementById('name');
     const targetInput = document.getElementById('target');
     const addBtn = document.getElementById('addBtn');
+    const internetBadge = document.getElementById('internetBadge');
+    const internetSummary = document.getElementById('internetSummary');
+    const internetChecks = document.getElementById('internetChecks');
 
     function esc(v) {
       return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -92,6 +112,26 @@
     function fmt(ts) {
       if (!ts) return '-';
       return new Date(ts * 1000).toLocaleTimeString('de-DE');
+    }
+
+    async function loadInternetStatus() {
+      try {
+        const res = await fetch('/api/internet', { cache: 'no-store' });
+        const data = await res.json();
+        internetBadge.className = `badge ${data.online ? 'up' : 'down'}`;
+        internetBadge.textContent = data.online ? 'Online' : 'Offline';
+        internetSummary.textContent = `Letzter Check: ${fmt(data.checkedAt)}`;
+        internetChecks.textContent = (data.checks || []).map(item => {
+          const label = `${item.name}: ${item.online ? 'online' : 'offline'}`;
+          const latency = item.latencyMs ? ` (${item.latencyMs} ms)` : '';
+          return label + latency;
+        }).join(' · ');
+      } catch (err) {
+        internetBadge.className = 'badge down';
+        internetBadge.textContent = 'Fehler';
+        internetSummary.textContent = 'Internet-Check konnte nicht geladen werden';
+        internetChecks.innerHTML = '';
+      }
     }
 
     async function loadHosts() {
@@ -148,8 +188,12 @@
     });
 
     addBtn.addEventListener('click', addHost);
+    loadInternetStatus();
     loadHosts();
-    setInterval(loadHosts, 5000);
+    setInterval(() => {
+      loadInternetStatus();
+      loadHosts();
+    }, 5000);
     window.removeHost = removeHost;
   </script>
 </body>

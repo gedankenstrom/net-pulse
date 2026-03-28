@@ -13,6 +13,10 @@ DATA = Path(os.environ.get('HOSTS_FILE', str(BASE / 'hosts.json')))
 INDEX = BASE / 'index.html'
 HOST = '0.0.0.0'
 PORT = 9301
+INTERNET_TARGETS = [
+    {'name': 'Cloudflare DNS', 'target': '1.1.1.1'},
+    {'name': 'Google DNS', 'target': '8.8.8.8'},
+]
 
 
 def ensure_data_file():
@@ -56,6 +60,26 @@ def enrich_hosts(hosts):
         return list(ex.map(check, hosts))
 
 
+def get_internet_status():
+    checks = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(INTERNET_TARGETS)) as ex:
+        futures = {ex.submit(ping_target, item['target']): item for item in INTERNET_TARGETS}
+        for future, item in futures.items():
+            online, latency = future.result()
+            checks.append({
+                'name': item['name'],
+                'target': item['target'],
+                'online': online,
+                'latencyMs': latency if online else None,
+            })
+
+    return {
+        'online': any(item['online'] for item in checks),
+        'checkedAt': int(time.time()),
+        'checks': checks,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, payload, code=200):
         raw = json.dumps(payload).encode('utf-8')
@@ -93,6 +117,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == '/api/hosts':
             self.send_json({'hosts': enrich_hosts(load_hosts())})
+            return
+        if self.path == '/api/internet':
+            self.send_json(get_internet_status())
             return
         self.send_response(404)
         self.end_headers()
