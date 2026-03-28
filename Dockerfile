@@ -7,6 +7,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY app.py /app/app.py
 COPY index.html /app/index.html
+COPY icon.svg /app/icon.svg
+COPY apple-touch-icon.png /app/apple-touch-icon.png
 
 RUN mkdir -p /app/data
 
