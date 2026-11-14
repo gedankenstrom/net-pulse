@@ -36,7 +36,7 @@ The container image is published to:
 
 ## Portainer Stack / Docker Compose
 
-Use this compose file and make sure you redeploy/pull the latest image after updates:
+Add `NET_PULSE_SETTINGS_PASSWORD` under **Environment variables** in your Portainer Stack (or define it in a `.env` file next to your Compose file). Choose a long, unique password. Then use this Compose file and pull the latest image when redeploying:
 
 ```yaml
 services:
@@ -48,6 +48,7 @@ services:
       - "9301:9301"
     environment:
       - HOSTS_FILE=/app/data/hosts.json
+      - SETTINGS_PASSWORD=${NET_PULSE_SETTINGS_PASSWORD:?Please set NET_PULSE_SETTINGS_PASSWORD in Portainer}
     volumes:
       - net-pulse-data:/app/data
 
