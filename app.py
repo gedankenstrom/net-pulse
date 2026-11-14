@@ -2,6 +2,8 @@
 import concurrent.futures
 import json
 import os
+import hmac
+import secrets
 import subprocess
 import time
 import uuid
@@ -13,6 +15,9 @@ DATA = Path(os.environ.get('HOSTS_FILE', str(BASE / 'hosts.json')))
 INDEX = BASE / 'index.html'
 HOST = '0.0.0.0'
 PORT = 9301
+SETTINGS_PASSWORD = os.environ.get('SETTINGS_PASSWORD', '')
+SESSION_TTL = 600
+SESSIONS = {}
 INTERNET_TARGETS = [
     {'name': 'Cloudflare DNS', 'target': '1.1.1.1'},
     {'name': 'Google DNS', 'target': '8.8.8.8'},
@@ -80,6 +85,23 @@ def get_internet_status():
     }
 
 
+def valid_settings_session(handler):
+    cookie = handler.headers.get('Cookie', '')
+    token = ''
+    for part in cookie.split(';'):
+        key, _, value = part.strip().partition('=')
+        if key == 'net_pulse_settings':
+            token = value
+            break
+    expires = SESSIONS.get(token)
+    if not expires:
+        return False
+    if expires < time.time():
+        SESSIONS.pop(token, None)
+        return False
+    return True
+
+
 class Handler(BaseHTTPRequestHandler):
     def send_json(self, payload, code=200):
         raw = json.dumps(payload).encode('utf-8')
@@ -115,6 +137,9 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(raw)
             return
+        if self.path == '/api/settings/status':
+            self.send_json({'unlocked': valid_settings_session(self)})
+            return
         if self.path == '/api/hosts':
             self.send_json({'hosts': enrich_hosts(load_hosts())})
             return
@@ -125,9 +150,52 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if self.path == '/api/settings/unlock':
+            if not SETTINGS_PASSWORD:
+                self.send_json({'error': 'Settings password is not configured'}, 503)
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                data = json.loads(self.rfile.read(length).decode('utf-8'))
+                supplied = str(data.get('password', ''))
+            except Exception:
+                supplied = ''
+            if not hmac.compare_digest(supplied.encode('utf-8'), SETTINGS_PASSWORD.encode('utf-8')):
+                self.send_json({'error': 'Invalid password'}, 401)
+                return
+            token = secrets.token_urlsafe(32)
+            SESSIONS[token] = time.time() + SESSION_TTL
+            secure = '; Secure' if self.headers.get('X-Forwarded-Proto', '').lower() == 'https' else ''
+            raw = json.dumps({'ok': True, 'expiresIn': SESSION_TTL}).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(raw)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Set-Cookie', f'net_pulse_settings={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_TTL}' + secure)
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+        if self.path == '/api/settings/lock':
+            cookie = self.headers.get('Cookie', '')
+            for part in cookie.split(';'):
+                key, _, value = part.strip().partition('=')
+                if key == 'net_pulse_settings':
+                    SESSIONS.pop(value, None)
+            raw = json.dumps({'ok': True}).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(raw)))
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Set-Cookie', 'net_pulse_settings=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0')
+            self.end_headers()
+            self.wfile.write(raw)
+            return
         if self.path != '/api/hosts':
             self.send_response(404)
             self.end_headers()
+            return
+        if not valid_settings_session(self):
+            self.send_json({'error': 'Settings authorization required'}, 401)
             return
         try:
             length = int(self.headers.get('Content-Length', '0'))
@@ -149,6 +217,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self.path.startswith('/api/hosts/'):
             self.send_response(404)
             self.end_headers()
+            return
+        if not valid_settings_session(self):
+            self.send_json({'error': 'Settings authorization required'}, 401)
             return
         host_id = self.path.rsplit('/', 1)[-1]
         hosts = load_hosts()
