@@ -190,7 +190,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(raw)
             return
-        if self.path != '/api/hosts':
+        if self.path not in ['/api/hosts', '/api/hosts/reorder']:
             self.send_response(404)
             self.end_headers()
             return
@@ -201,6 +201,16 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', '0'))
             body = self.rfile.read(length).decode('utf-8')
             data = json.loads(body)
+            if self.path == '/api/hosts/reorder':
+                order = data.get('order', [])
+                hosts = load_hosts()
+                by_id = {str(host.get('id')): host for host in hosts}
+                if not isinstance(order, list) or len(order) != len(hosts) or set(order) != set(by_id):
+                    self.send_json({'error': 'Invalid host order'}, 400)
+                    return
+                save_hosts([by_id[host_id] for host_id in order])
+                self.send_json({'ok': True})
+                return
             name = str(data.get('name', '')).strip()
             target = str(data.get('target', '')).strip()
             if not target:
