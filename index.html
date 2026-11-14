@@ -54,6 +54,10 @@
     .right { display: flex; gap: 8px; align-items: center; }
     .ghost { background: rgba(17,24,39,.06); color: var(--text); display: none; }
     body.manage .ghost { display: inline-flex; }
+    .move-controls { display: none; gap: 5px; }
+    body.manage .move-controls { display: flex; }
+    .move-controls button { padding: 8px 11px; font-size: 16px; }
+    .move-controls button:disabled { opacity: .3; cursor: default; }
   </style>
 </head>
 <body>
@@ -174,6 +178,10 @@
             </div>
             <div class="right">
               <span class="badge ${h.online ? 'up' : 'down'}">${h.online ? 'Online' : 'Offline'}</span>
+              <div class="move-controls">
+                <button onclick="moveHost('${esc(h.id)}', -1)" aria-label="Nach oben verschieben" title="Nach oben" ${hosts.indexOf(h) === 0 ? 'disabled' : ''}>↑</button>
+                <button onclick="moveHost('${esc(h.id)}', 1)" aria-label="Nach unten verschieben" title="Nach unten" ${hosts.indexOf(h) === hosts.length - 1 ? 'disabled' : ''}>↓</button>
+              </div>
               <button class="ghost" onclick="removeHost('${esc(h.id)}')">Löschen</button>
             </div>
           </div>
@@ -197,6 +205,25 @@
     async function removeHost(id) {
       await fetch('/api/hosts/' + id, { method: 'DELETE' });
       loadHosts();
+    }
+
+    async function moveHost(id, direction) {
+      const cards = [...list.querySelectorAll('.card')].filter(card => card.querySelector('.move-controls'));
+      const currentHosts = (await (await fetch('/api/hosts', { cache: 'no-store' })).json()).hosts || [];
+      const index = currentHosts.findIndex(host => host.id === id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= currentHosts.length) return;
+      [currentHosts[index], currentHosts[nextIndex]] = [currentHosts[nextIndex], currentHosts[index]];
+      const response = await fetch('/api/hosts/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: currentHosts.map(host => host.id) })
+      });
+      if (!response.ok) {
+        alert('Die Reihenfolge konnte nicht gespeichert werden.');
+        return;
+      }
+      await loadHosts();
     }
 
     themeBtn.addEventListener('click', () => {
