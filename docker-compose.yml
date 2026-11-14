@@ -7,6 +7,7 @@ services:
       - "9301:9301"
     environment:
       - HOSTS_FILE=/app/data/hosts.json
+      - SETTINGS_PASSWORD=${NET_PULSE_SETTINGS_PASSWORD:?Bitte NET_PULSE_SETTINGS_PASSWORD in der .env setzen}
     volumes:
       - net-pulse-data:/app/data
 
