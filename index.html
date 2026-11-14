@@ -38,6 +38,13 @@
     input { width: 100%; padding: 13px 15px; border-radius: 14px; border: 1px solid var(--border); background: rgba(255,255,255,.9); color: var(--text); font-size: 16px; }
     button { border: 0; border-radius: 14px; padding: 12px 15px; font-weight: 700; cursor: pointer; background: rgba(17,24,39,.06); color: var(--text); }
     body.dark button:not(.theme-toggle):not(.gear) { background: rgba(255,255,255,.08); color: var(--text); }
+    .password-dialog { width: min( calc(100% - 32px), 380px); border: 1px solid var(--border); border-radius: 20px; padding: 22px; background: var(--bg); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    .password-dialog::backdrop { background: rgba(0,0,0,.48); backdrop-filter: blur(3px); }
+    .password-dialog h2 { margin: 0 0 8px; font-size: 20px; }
+    .password-dialog p { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+    .password-dialog input { margin-bottom: 14px; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .dialog-actions button:last-child { background: var(--accent); color: white; }
     .list { display: grid; gap: 14px; }
     .row { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
     .meta { color: var(--muted); font-size: 14px; margin-top: 6px; }
@@ -85,6 +92,18 @@
     <div class="list" id="list"></div>
   </div>
 
+  <dialog class="password-dialog" id="passwordDialog">
+    <form id="passwordForm">
+      <h2>Einstellungen freischalten</h2>
+      <p>Bitte gib dein Passwort ein.</p>
+      <input id="settingsPassword" type="password" placeholder="Passwort" autocomplete="current-password" required>
+      <div class="dialog-actions">
+        <button type="button" id="cancelPassword">Abbrechen</button>
+        <button type="submit">Freischalten</button>
+      </div>
+    </form>
+  </dialog>
+
   <script>
     const list = document.getElementById('list');
     const form = document.getElementById('form');
@@ -96,6 +115,10 @@
     const internetBadge = document.getElementById('internetBadge');
     const internetSummary = document.getElementById('internetSummary');
     const internetChecks = document.getElementById('internetChecks');
+    const passwordDialog = document.getElementById('passwordDialog');
+    const passwordForm = document.getElementById('passwordForm');
+    const settingsPassword = document.getElementById('settingsPassword');
+    const cancelPassword = document.getElementById('cancelPassword');
 
     function esc(v) {
       return String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -184,17 +207,7 @@
     let settingsUnlocked = false;
     let settingsTimeout = null;
 
-    gearBtn.addEventListener('click', async () => {
-      if (form.classList.contains('open')) {
-        form.classList.remove('open');
-        document.body.classList.remove('manage');
-        await fetch('/api/settings/lock', { method: 'POST' });
-        settingsUnlocked = false;
-        clearTimeout(settingsTimeout);
-        return;
-      }
-      const password = window.prompt('Passwort für Einstellungen eingeben:');
-      if (password === null) return;
+    async function unlockSettings(password) {
       try {
         const response = await fetch('/api/settings/unlock', {
           method: 'POST',
@@ -206,6 +219,8 @@
           alert(result.error === 'Settings password is not configured'
             ? 'Der Passwortschutz ist auf dem Server noch nicht eingerichtet.'
             : 'Passwort falsch.');
+          settingsPassword.focus();
+          settingsPassword.select();
           return;
         }
         settingsUnlocked = true;
@@ -217,12 +232,39 @@
           settingsUnlocked = false;
           alert('Die Freigabe der Einstellungen ist abgelaufen.');
         }, result.expiresIn * 1000);
+        passwordDialog.close();
+        passwordForm.reset();
         form.classList.add('open');
         document.body.classList.add('manage');
         targetInput.focus();
       } catch (error) {
         alert('Einstellungen konnten nicht freigeschaltet werden.');
       }
+    }
+
+    gearBtn.addEventListener('click', async () => {
+      if (form.classList.contains('open')) {
+        form.classList.remove('open');
+        document.body.classList.remove('manage');
+        await fetch('/api/settings/lock', { method: 'POST' });
+        settingsUnlocked = false;
+        clearTimeout(settingsTimeout);
+        return;
+      }
+      passwordForm.reset();
+      passwordDialog.showModal();
+      settingsPassword.focus();
+    });
+
+    passwordForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const password = settingsPassword.value;
+      await unlockSettings(password);
+    });
+
+    cancelPassword.addEventListener('click', () => {
+      passwordDialog.close();
+      passwordForm.reset();
     });
 
     addBtn.addEventListener('click', addHost);
