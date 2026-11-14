@@ -181,10 +181,48 @@
       applyTheme(next);
     });
 
-    gearBtn.addEventListener('click', () => {
-      const open = form.classList.toggle('open');
-      document.body.classList.toggle('manage', open);
-      if (open) targetInput.focus();
+    let settingsUnlocked = false;
+    let settingsTimeout = null;
+
+    gearBtn.addEventListener('click', async () => {
+      if (form.classList.contains('open')) {
+        form.classList.remove('open');
+        document.body.classList.remove('manage');
+        await fetch('/api/settings/lock', { method: 'POST' });
+        settingsUnlocked = false;
+        clearTimeout(settingsTimeout);
+        return;
+      }
+      const password = window.prompt('Passwort für Einstellungen eingeben:');
+      if (password === null) return;
+      try {
+        const response = await fetch('/api/settings/unlock', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          alert(result.error === 'Settings password is not configured'
+            ? 'Der Passwortschutz ist auf dem Server noch nicht eingerichtet.'
+            : 'Passwort falsch.');
+          return;
+        }
+        settingsUnlocked = true;
+        clearTimeout(settingsTimeout);
+        settingsTimeout = setTimeout(async () => {
+          form.classList.remove('open');
+          document.body.classList.remove('manage');
+          await fetch('/api/settings/lock', { method: 'POST' });
+          settingsUnlocked = false;
+          alert('Die Freigabe der Einstellungen ist abgelaufen.');
+        }, result.expiresIn * 1000);
+        form.classList.add('open');
+        document.body.classList.add('manage');
+        targetInput.focus();
+      } catch (error) {
+        alert('Einstellungen konnten nicht freigeschaltet werden.');
+      }
     });
 
     addBtn.addEventListener('click', addHost);
