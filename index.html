@@ -182,6 +182,7 @@
     });
 
     let settingsUnlocked = false;
+    let settingsTimeout = null;
 
     gearBtn.addEventListener('click', async () => {
       if (form.classList.contains('open')) {
@@ -189,6 +190,7 @@
         document.body.classList.remove('manage');
         await fetch('/api/settings/lock', { method: 'POST' });
         settingsUnlocked = false;
+        clearTimeout(settingsTimeout);
         return;
       }
       const password = window.prompt('Passwort für Einstellungen eingeben:');
@@ -207,6 +209,14 @@
           return;
         }
         settingsUnlocked = true;
+        clearTimeout(settingsTimeout);
+        settingsTimeout = setTimeout(async () => {
+          form.classList.remove('open');
+          document.body.classList.remove('manage');
+          await fetch('/api/settings/lock', { method: 'POST' });
+          settingsUnlocked = false;
+          alert('Die Freigabe der Einstellungen ist abgelaufen.');
+        }, result.expiresIn * 1000);
         form.classList.add('open');
         document.body.classList.add('manage');
         targetInput.focus();
